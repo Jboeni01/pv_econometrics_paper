@@ -28,17 +28,17 @@ library(readr)
 #library(XML)
 
 setwd("C:/Users/u0149894/Desktop/Code")
+outputpath <- paste0(getwd(),"/data/plots")
 
 #########
 #Load Data 
 #########
 
 load(paste0(getwd(),"/data/tariffs_pel_subreg.Rdata")) #subregional electricity prices
-load(paste0(getwd(),"/data/npv_final.Rdata"))
-load(paste0(getwd(),"/data/b_subreg.Rdata"))
 load(paste0(getwd(),"/data/npv_final.Rdata")) #npv data 
+load(paste0(getwd(),"/data/b_subreg.Rdata")) #npv data for surbregions 
 load(paste0(getwd(),"/data/PV_total_estdata_monthly.Rdata")) #full data monthly 
-load(paste0(getwd(),"/data/PV_total_estdata.Rdata")) #full data monthly 
+#load(paste0(getwd(),"/data/PV_total_estdata.Rdata")) #full data monthly 
 
 
 yrange <- 2008:2019
@@ -46,9 +46,8 @@ start_date <- as.Date("2008-01-01")  # Specify the desired start date
 end_date <- as.Date("2019-12-01")  # Specify the desired end date
 
 ################################################################################
-#plot pel, benefits and npv 
+#plot pel and instrument - Figure A2
 ################################################################################
-
 
 
 #Plot regional electricity prices
@@ -81,85 +80,16 @@ pel_reg_plot <- pel_reg_df %>%
   labs(color = "")
 print(pel_reg_plot)
 
-ggsave("pel_IV_plot.pdf", pel_reg_plot, path = paste0(getwd(),"/data/plots"), height=5, width=8.75)  
-
-
-
-#plot regional distribution tariffs 
-pel_subreg_df <- tariffs_pel_subreg %>% 
-  subset(year %in% yrange) %>%
-  select(year,month,date,region,dso,pel_mix_regional_kwh,pel_mix_kwh) %>%
-  subset(!(dso%in%c("AGEM","EV/GHA4")))
-
-unique(pel_subreg_plot$dso)
-
-pel_subreg_plot <- pel_subreg_df %>%
-  ggplot(aes(x=date, group=dso, color=region)) + 
-  geom_line(aes(y = pel_mix_regional_kwh), alpha=0.6, linetype="solid", size=0.2) +
-  geom_point(aes(y = pel_mix_regional_kwh), alpha=0.2, size=0.2, shape=18) +
-  geom_line(aes(y = pel_mix_kwh, linetype=region), color="black", alpha=0.6, size=0.4) + #
-  geom_point(aes(y = pel_mix_kwh), color="black", alpha=0.4, size=0.4, shape=18) +
-  labs(x="",y="Electricity price in EUR/KWh", color="") +
-  coord_cartesian(xlim = c(start_date, end_date), expand=F) + 
-  scale_x_date(date_labels = "%b/%y", limits = c(start_date, end_date), breaks="6 months") +
-  theme_bw() +   #+ xlim(2008, 2019) +theme(axis.text.x = element_text(angle = 90, hjust = 1)) # Rotate x-axis labels by 90 degrees
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  theme(legend.position = 'bottom') +
-  theme(legend.title = element_blank()) +
-  scale_fill_discrete(labels=c("Flanders average", "Wallonia average", "Flanders", "Wallonia"))
-print(pel_subreg_plot)
-
-ggsave("pel_subreg_plot.pdf", pel_subreg_plot, path = paste0(getwd(),"/data/plots"), height=5, width=8.75)  
-
-pel_subreg_pres_plot <- pel_subreg_plot +
-  theme(axis.text = element_text(size = 12), plot.title=element_text(hjust=0.5),
-        legend.box.spacing = unit(-10, "pt")) +
-  theme(axis.text = element_text(size = 12), plot.title = element_text(hjust = 0.5),
-        legend.position = "bottom", legend.text = element_text(size = 12)) 
-ggsave("pel_subreg_plot_pres.pdf",pel_subreg_pres_plot, path = paste0(getwd(),"/data/plots"), height=4, width=10)
-
-#plot sub-regional benefits 
-benefits_df <- full_join(b_subreg,npv_final,by=c("year","month","region"))
-
-benefits_df  <- benefits_df %>%
-  subset(year%in%2008:2019 & !(dso%in%c("AGEM","EV/GHA4"))) %>%
-  select(c("dso","region","year","month","b_protar_subreg","b_qw_subreg","b_nm_subreg",
-           "b_gc","b_tc","b_nm","b_protar","b_qw")) %>%
-  #mutate(across(c("b_protar_subreg","b_qw_subreg","b_nm_subreg",
-  #                "b_gc","b_tc","b_nm","b_protar","b_qw"),~if_else(is.na(.x),0,.x))) %>%
-  mutate(b_net_agg = (b_gc+b_tc+b_nm+b_protar+b_qw)/1000,
-         b_net = (b_gc+b_tc+b_nm_subreg+b_protar_subreg+b_qw_subreg)/1000,
-         date = as.Date(paste(year,month,"01",sep="-")))  
-
-benefits_plot <- benefits_df %>%
-  ggplot(aes(x=date,y = b_net, color = dso, linetype=region)) + 
-  geom_line() + 
-  labs(x="",y="Discounted benefits (thousand EUR)") +
-  theme_bw() +#+ xlim(2008, 2019)
-  coord_cartesian(xlim = c(start_date, end_date), expand=F) + 
-  scale_x_date(date_labels = "%b/%y", limits = c(start_date, end_date), breaks="6 months") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-ggsave("benefits_plot.pdf", benefits_plot , path = paste0(getwd(),"/data/plots"), height=5, width=8.75)  
-
-
-
-#pel_change <- pel_plot %>% subset(date%in%c(as.Date("2008-01-01"),as.Date("2019-12-01")))
+ggsave("pel_IV_plot.pdf", pel_reg_plot, path = outputpath, height=5, width=8.75)  
 
 
 ################################################################################
-# Area Plots 
+# Area Plots - Figure 2
 ################################################################################
-
-
-#cap <- 4
-#c_capkw <- paste0("c_",cap,"kw") #variable name based on capacity chosen 
-#c_capkw_defl <- paste0(c_capkw,"_defl")
-
 
 benefits <- c("b_gc","b_nm","b_protar","b_tc","b_qw")
 benefits_defl <- paste0(benefits,"_defl")
-#cost <- c(c_capkw,c_capkw_defl)
+
 cost <- grep("^c_",colnames(npv_final), value=T)
 c_capkw <- grep("_defl", cost, value=T, invert=T)
 c_capkw_defl <- grep("_defl", cost, value=T, invert=F)
@@ -167,13 +97,10 @@ cap <- gsub("[^0-9]", "", c_capkw) %>% as.numeric
 
 
 npv_vars <- c("npv","npv_defl")
-#cost_defl <- "c_4kw_defl"
 
-#-1- determine data set for plot 
-#npv_df <- npv_final %>% subset(select=c("year","month","region",benefits, benefits_defl, cost, npv_vars),year%in%2008:2019)
 
 #-1- Define ordering of area plot and rename 
-plotorder <- c(5,2,1,3,4) #digits following the ordering of benefits: (i) gv, (ii) nm, (iii) protar, (iv) tc, (v) qw
+plotorder <- c(5,2,1,3,4) #digits following the ordering of benefits: (i) gc, (ii) nm, (iii) protar, (iv) tc, (v) qw
 benefits_ordered <- paste(plotorder,benefits,sep="_")
 
 #-2- Determine data and rename 
@@ -224,16 +151,9 @@ benefits_list[["wa_defl"]] <- unique(npv_df_long$benefits) %>%
   grep("_defl",.,value=T,invert=F)
 
 
-#cats_fl_defl <- cats %>% grep("_qw",.,value=T,invert=T) %>% grep("_defl",.,value=T,invert=F)
-
-#cats_wa <- cats %>% grep("_protar",.,value=T,invert=T) %>% grep("_defl",.,value=T,invert=T)
-#cats_wa_defl <- cats %>% grep("_protar",.,value=T,invert=T) %>% grep("_defl",.,value=T,invert=F)
-
-#setdiff(cats_wa,cats_fl)
-
+#-5- Plot 
 npv_plots_list <- list()
 regions_abrev <- c("fl","wa")
-r <- "Flanders"
 
 npv_df_long <- npv_df_long %>%
   mutate(value=if_else(benefits %in% c("1_b_protar","1_b_protar_defl") & value==0,NA_real_,value)) 
@@ -275,17 +195,19 @@ for(r in c("Flanders","Wallonia")){
     #  theme(legend.position = 'none', axis.text = element_text(size = 12), plot.title=element_text(hjust=0.5)) + 
     print(npv_plots_list[[paste0(reg_abrev,i)]])
     ggsave(paste0("npv_area_",reg_abrev,i,".pdf"),npv_plot, path = paste0(getwd(),"/data/plots"), height=5, width=8.75)
+    
+    #print in different format for presentations 
     npv_plot <- npv_plot +
       theme(axis.text = element_text(size = 12), plot.title=element_text(hjust=0.5),
             legend.box.spacing = unit(-5, "pt")) +
       ggtitle(r)
-    ggsave(paste0("npv_area_",reg_abrev,i,"_pres.pdf"),npv_plot, path = paste0(getwd(),"/data/plots"), height=3, width=10)
-    ggsave(paste0("npv_area_",reg_abrev,i,"_pres.png"),npv_plot, path = paste0(getwd(),"/data/plots"), height=3, width=10)
+    ggsave(paste0("npv_area_",reg_abrev,i,"_pres.pdf"),npv_plot, path = outputpath, height=3, width=10)
+    ggsave(paste0("npv_area_",reg_abrev,i,"_pres.png"),npv_plot, path = outputpath, height=3, width=10)
     }
   }
 
 ################################################################################
-# Plot monthly regional aggregates of PV installations
+# Plot monthly regional aggregates of PV installations - Figure 1
 ################################################################################
 
 pv_monthly_df <- estimate.data.monthly %>%
@@ -305,13 +227,17 @@ pv_monthly_regagg_df <- pv_monthly_df %>%
 coeff <- 20 
 alph <- 0.5
 siz <- 0.5
+yrange <- 2008:2019
 
-
-plot_regagg_PVts <- function(plot, alpha=alph, size=siz, coefficient = coeff, region="Wallonia"){
-  plot <- plot +
-    geom_line(aes(y = pv_count_cumsum / coeff /1000, color = "cumulated installations"), size = 1, show.legend = TRUE, alpha=alph, linetype="longdash") +
+plot_regagg_PVts <- function(data, alpha=alph, size=siz, coefficient = coeff, regionname="Wallonia"){
+  
+  plot <- data %>%
+    subset(year %in% yrange & region == regionname) %>%
+    ggplot(aes(x = date)) + 
+    #geom_vline(data = vlines, aes(xintercept = xintercepts), linetype="dashed" ,color = "red", show.legend = F) + 
+    geom_line(aes(y = pv_count_cumsum / coeff /1000, color = "cumulated installations"), size = 1, show.legend = T, alpha=alph, linetype="longdash") +
     geom_line(aes(y = pv_count / 1000, color = "monthly new installations"), size = 1, show.legend = TRUE) +
-    geom_point(aes(y = pv_count / 1000, color = "monthly new installations"), size = 1, show.legend = F) +
+    geom_point(aes(y = pv_count / 1000, color = "monthly new installations"), size = 1, show.legend = F)+
     #annotate(geom = "text", x = as.Date("2019-04-01"), y = 6500, label = "Cumulated", color = "grey", size = 4) +
     #annotate(geom = "text", x = as.Date("2010-03-01"), y = 9500, label = "GC benefit change + 6 months", color = "red", size = 4, alpha = alph) +
     scale_y_continuous(
@@ -325,111 +251,64 @@ plot_regagg_PVts <- function(plot, alpha=alph, size=siz, coefficient = coeff, re
           legend.position = "bottom", 
           legend.text = element_text(size = 12),
           axis.title.y.right = element_text(angle = 90)  # Rotate the secondary y-axis label
-    ) 
+    )  +
+    labs(fill = '') +
+    coord_cartesian(xlim = c(start_date, end_date), expand = FALSE) +
+    scale_x_date(date_labels = "%Y", limits = c(start_date, end_date), breaks = "1 year") +
+    scale_color_manual(
+      name = "",
+      values = c("monthly new installations" = "black", "cumulated installations" = "#333333"),
+      labels = c("monthly new \n installations","accumulated \n installations (RHS)")
+    ) +
+    guides(colour = guide_legend(override.aes = list(linetype=c(1,2))))
   
-    if(region=="Wallonia"){
-      plot <- plot +
-        labs(fill = '') +
-        coord_cartesian(xlim = c(start_date, end_date), expand = FALSE) +
-        scale_x_date(date_labels = "%Y", limits = c(start_date, end_date), breaks = "1 year") +
-        #scale_linetype_manual(
-        #name = "",
-        #values = c("solid", "dashed", "solid"),
-        #labels = c("monthly new installations", "GC change + 6 months", "accumulated installations")
-        #) +
-        scale_color_manual(
-        name = "",
-        values = c("monthly new installations" = "black", "output-based benefit change + 6 months" = "red","capacity-based benefit change" = "red", "cumulated installations" = "#333333"),
-        labels = c("monthly new \n installations", "output-based benefit \n change + 6 months","capacity-based \n benefit change", "accumulated \n installations (RHS)")
-        ) +
-        guides(colour = guide_legend(override.aes = list(linetype=c(1,1,3,3))))
-    }
-    else if(region=="Flanders"){
-      plot <- plot +
-        labs(fill = '') +
-        coord_cartesian(xlim = c(start_date, end_date), expand = FALSE) +
-        scale_x_date(date_labels = "%Y", limits = c(start_date, end_date), breaks = "1 year") +
-        #scale_linetype_manual(
-        #  name = "",
-        #  values = c("solid", "dashed", "solid"),
-        #  labels = c("monthly new installations", "GC change + 6 months", "accumulated installations")
-        #) +
-        scale_color_manual(
-          name = "",
-          values = c("monthly new installations" = "black", "output-based benefit change" = "red", "cumulated installations" = "#333333"),
-          labels = c("monthly new \n installations", "output-based benefit change", "accumulated \n installations (RHS)")
-        ) +
-        guides(colour = guide_legend(override.aes = list(linetype=c(1,1,3))))
-      
-    }
   return(plot)
 }
 
+#Flanders
+plot_PV_fl <- plot_regagg_PVts(pv_monthly_regagg_df, regionname = "Flanders")
 
-pv_monthly_wa_plot <- pv_monthly_regagg_df %>%
-  subset(year %in% yrange & region == "Wallonia") %>%
-  ggplot(aes(x = date)) +
-  geom_vline(xintercept = as.Date("2012-05-01"), color = "red", alpha = alph, size = siz, show.legend = TRUE) +
-  #geom_vline(xintercept = as.Date("2012-09-01"), color = "red", linetype = "dashed", alpha = alph, size = siz) +
-  #geom_vline(xintercept = as.Date("2013-02-01"), color = "red", linetype = "dashed", alpha = alph, size = siz) +
-  #geom_vline(xintercept = as.Date("2013-09-01"), color = "red", linetype = "dashed", alpha = alph, size = siz) +
-  #geom_vline(xintercept = as.Date("2014-08-01"), color = "red", linetype = "dashed", alpha = alph, size = siz) +
-  geom_vline(xintercept = as.Date("2014-06-01"), color = "red", linetype = "dashed", alpha = alph, size = siz, show.legend = TRUE) +
-  geom_vline(xintercept = as.Date("2014-12-01"), color = "red", linetype = "dashed", alpha = alph, size = siz) +
-  geom_vline(xintercept = as.Date("2015-06-01"), color = "red", linetype = "dashed", alpha = alph, size = siz) +
-  geom_vline(xintercept = as.Date("2015-12-01"), color = "red", linetype = "dashed", alpha = alph, size = siz) +
-  geom_vline(xintercept = as.Date("2016-06-01"), color = "red", linetype = "dashed", alpha = alph, size = siz) +
-  geom_vline(xintercept = as.Date("2016-12-01"), color = "red", linetype = "dashed", alpha = alph, size = siz) +
-  geom_vline(xintercept = as.Date("2017-06-01"), color = "red", linetype = "dashed", alpha = alph, size = siz) +
-  geom_vline(xintercept = as.Date("2017-12-01"), color = "red", linetype = "dashed", alpha = alph, size = siz) +
-  geom_vline(xintercept = as.Date("2018-06-01"), color = "red", linetype = "dashed", alpha = alph, size = siz)
+vlines <- data.frame(
+  xintercepts = as.Date(c("2009-12-01", "2010-12-01", "2011-06-01", "2011-09-01",
+                          "2011-12-01", "2012-03-01", "2012-06-01", "2012-07-01", 
+                          "2012-12-01")))
+plot_PV_fl <- plot_PV_fl + geom_vline(data=vlines, aes(xintercept = xintercepts), color = "red")
 
+print(plot_PV_fl)
+ggsave("pv_fl_monthly.pdf", plot_PV_fl, path = outputpath, height=5, width=8.75)
 
-pv_monthly_wa_plot <- plot_regagg_PVts(pv_monthly_wa_plot, region="Wallonia")
-print(pv_monthly_wa_plot)
-
-ggsave("pv_wa_monthly.pdf", pv_monthly_wa_plot, path = paste0(getwd(),"/data/plots"), height=5, width=8.75)
-
-pv_monthly_wa_pres_plot <- pv_monthly_wa_plot +
-  theme(axis.text = element_text(size = 12), plot.title=element_text(hjust=0.5),
-        legend.box.spacing = unit(-10, "pt")) +
-  ggtitle("Wallonia")
-ggsave("pv_wa_monthly_pres.pdf",pv_monthly_wa_pres_plot, path = paste0(getwd(),"/data/plots"), height=3, width=10)
-ggsave("pv_wa_monthly_pres.png",pv_monthly_wa_pres_plot, path = paste0(getwd(),"/data/plots"), height=3, width=10)
-
-
-pv_monthly_fl_plot <-  pv_monthly_regagg_df %>%
-  subset(year %in% yrange & region == "Flanders") %>%
-  ggplot(aes(x=date)) + 
-  geom_vline(xintercept=as.Date("2009-12-01"), color="red", alpha=alph, size=siz, show.legend = TRUE) +
-  geom_vline(xintercept=as.Date("2010-12-01"), color="red", alpha=alph, size=siz) +
-  geom_vline(xintercept=as.Date("2011-06-01"), color="red", alpha=alph, size=siz) +
-  geom_vline(xintercept=as.Date("2011-09-01"), color="red", alpha=alph, size=siz) +
-  geom_vline(xintercept=as.Date("2011-12-01"), color="red", alpha=alph, size=siz) +
-  geom_vline(xintercept=as.Date("2012-03-01"), color="red", alpha=alph, size=siz) +
-  geom_vline(xintercept=as.Date("2012-06-01"), color="red", alpha=alph, size=siz) +
-  geom_vline(xintercept=as.Date("2012-07-01"), color="red", alpha=alph, size=siz) +
-  geom_vline(xintercept=as.Date("2012-12-01"), color="red", alpha=alph, size=siz) 
-
-pv_monthly_fl_plot <- plot_regagg_PVts(pv_monthly_fl_plot, region="Flanders")
-
-print(pv_monthly_fl_plot)
-
-ggsave("pv_fl_monthly.pdf", pv_monthly_fl_plot, path = paste0(getwd(),"/data/plots"), height=5, width=8.75)
-
-pv_monthly_fl_pres_plot <- pv_monthly_fl_plot +
+plot_PV_fl_pres <- plot_PV_fl +
   theme(axis.text = element_text(size = 12), plot.title=element_text(hjust=0.5),
         legend.box.spacing = unit(-10, "pt")) +
   ggtitle("Flanders")
-ggsave("pv_fl_monthly_pres.pdf",pv_monthly_fl_pres_plot, path = paste0(getwd(),"/data/plots"), height=3, width=10)
-ggsave("pv_fl_monthly_pres.png",pv_monthly_fl_pres_plot, path = paste0(getwd(),"/data/plots"), height=3, width=10)
+print(plot_PV_fl_pres)
+ggsave("pv_fl_monthly_pres.pdf",plot_PV_fl_pres, path = outputpath, height=3, width=10)
+ggsave("pv_fl_monthly_pres.png",plot_PV_fl_pres, path = outputpath, height=3, width=10)
 
+#Wallonia
+plot_PV_wa <- plot_regagg_PVts(pv_monthly_regagg_df, regionname = "Wallonia")
 
+vlines <- data.frame(
+  xintercepts = as.Date(c("2015-06-01", "2015-12-01", "2016-06-01",
+                          "2016-12-01", "2017-06-01", "2017-12-01", "2018-06-01")))
 
+plot_PV_wa <- plot_PV_wa +
+  geom_vline(xintercept = as.Date("2012-05-01"), color="red") + 
+  geom_vline(data=vlines, aes(xintercept = xintercepts), color = "red", linetype="dashed")
+print(plot_PV_wa)
 
+ggsave("pv_wa_monthly.pdf", plot_PV_wa, path = outputpath, height=5, width=8.75)
+
+plot_PV_wa_pres <- plot_PV_wa +
+  theme(axis.text = element_text(size = 12), plot.title=element_text(hjust=0.5),
+        legend.box.spacing = unit(-10, "pt")) +
+  ggtitle("Wallonia")
+print(plot_PV_wa_pres)
+ggsave("pv_wa_monthly_pres.pdf",plot_PV_wa_pres, path = outputpath, height=3, width=10)
+ggsave("pv_wa_monthly_pres.png",plot_PV_wa_pres, path = outputpath, height=3, width=10)
 
 ################################################################################
-# Plot monthly PV data by municipality 
+# Additional: Plot monthly PV data by municipality 
 ################################################################################
 
 pv_monthly_df <- estimate.data.monthly %>%
@@ -503,112 +382,9 @@ for(i in c("Flanders")){ #,"Wallonia"
   
 }
 
-  
-  
-plot.linets <- estimate.data.final.ysset %>% 
-  subset(select=c("zip","year","region","pv_capkw","pv_count","pv_meansize"),
-         year%in%2009:2019 & region==i) %>%
-  group_by(year) %>%
-  mutate(pv_meansize_mean = mean(pv_meansize, na.rm=T),
-         pv_meansize_med = median(pv_meansize, na.rm=T)) %>% 
-  ggplot(aes(x=year)) + 
-  geom_line(aes(y=pv_meansize, group=as.character(zip)), colour="grey", alpha=0.7) + 
-  geom_line(aes(y=pv_meansize_mean), colour="black") + 
-  geom_line(aes(y=pv_meansize_med), colour="black", linetype="dashed") +
-  scale_x_continuous(breaks=seq(2008,2019,by=1), minor_breaks=seq(2008,2019,by=1)) +
-  scale_y_continuous(breaks=seq(1,9,by=1))#, minor_breaks=seq(2008,2019,by=1)) +
 
 
-print(plot.linets)
 
-plot.linets <- estimate.data.monthly.final.ysset %>% 
-  subset(select=c("zip","year","date","region","pv_capkw","pv_count","pv_meansize"), 
-         year%in%2009:2019 & region==i &pv_meansize!=0) %>%
-  group_by(date) %>%
-  mutate(pv_meansize_mean = mean(pv_meansize, na.rm=T),
-         pv_meansize_med = median(pv_meansize, na.rm=T)) %>% 
-  ggplot(aes(x=date)) + 
-  geom_line(aes(y=pv_meansize, group=as.character(zip)), colour="grey", alpha=0.7) + 
-  geom_line(aes(y=pv_meansize_mean), colour="black") + 
-  geom_line(aes(y=pv_meansize_med), colour="black", linetype="dashed") +
-  scale_x_continuous(breaks=seq(2008,2019,by=1), minor_breaks=seq(2008,2019,by=1)) +
-  scale_y_continuous(breaks=seq(1,9,by=1))#, minor_breaks=seq(2008,2019,by=1)) +
-
-print(plot.linets)
-
-  
-###############################################################################
-# Check for correlation between distribution tariffs and PV adoption, especially in Flanders
-###############################################################################
-
-scatter_ts <- estimate.data %>% 
-  select(year,region,dso,zip,disttar_mixed,pv_count,hh_size) %>%
-  mutate(pv_hh = pv_count/hh_size) %>%
-  subset(year=2012)
-
-plot.scatter_ts <- scatter_ts %>%
-  ggplot(aes(x=pv_hh,y=disttar_mixed,color=region)) +
-  geom_point()
-
-print(plot.scatter_ts)
-
-disttar_ts <- estimate.data %>% 
-  select(year,region,dso,zip,disttar_mixed,pv_count,hh_size) %>%
-  mutate(date = as.Date(paste0(year,"-01-01"))) %>%
-  group_by(date,region,dso) %>%
-  summarise(disttar_mixed=first(disttar_mixed)) %>%
-  ungroup()
-
-plot.disttar_ts <- disttar_ts %>%
-  ggplot(aes(x=date,y=disttar_mixed,group=dso,color=region)) +
-  geom_line()
-
-print(plot.disttar_ts)
-
-
-################################################################################
-# Plot possible instrument
-################################################################################
-
-IV_df <- estimate.data.monthly %>%
-  select(year,month,date,region,zip,b_nm_mix_retail_solw_defl,b_nm_solw_defl,b_nm_mix_retail_defl, b_nm_defl) %>%
-  group_by(year,month,date,region) %>%
-  summarise(across(all_of(grep("b_",colnames(.), value=T)), first)) %>%
-  ungroup() %>%
-  pivot_longer(cols=starts_with("b_"),
-               names_to = "b_type",
-               values_to= "value")
-
-
-IV_plot <- IV_df %>%
-  subset(b_type %in% c("b_nm_mix_retail_solw_defl","b_nm_solw_defl")) %>%
-  ggplot(aes(x = date, y = value, group = interaction(b_type, region))) + 
-  geom_line(aes(color = region, linetype = b_type)) +
-  labs(x = "", y = "Electricity price in EUR/KWh", color = "", linetype="") +
-  coord_cartesian(xlim = c(start_date, end_date), expand = FALSE) + 
-  scale_x_date(date_labels = "%b/%y", limits = c(start_date, end_date), breaks = "6 months") +
-  theme_bw() +   
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        legend.position = 'bottom',
-        legend.text = element_text(size = 12)) +  # Adjust the font size here
-  scale_linetype_manual(values = c("solid", "dashed"), label=c("w/ distr. tarif","w/o distr. tariff")) +
-  labs(color = "")
-print(IV_plot)  
-
-IV_plot <- IV_df %>%
-  subset(b_type %in% c("b_nm_solw_defl","b_nm_defl")) %>%
-  ggplot(aes(x = date, y = value, group = interaction(b_type, region))) + 
-  geom_line(aes(color = region, linetype = b_type)) +
-  labs(x = "", y = "Electricity price in EUR/KWh", color = "", linetype="") +
-  coord_cartesian(xlim = c(start_date, end_date), expand = FALSE) + 
-  scale_x_date(date_labels = "%b/%y", limits = c(start_date, end_date), breaks = "6 months") +
-  theme_bw() +   
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        legend.position = 'bottom',
-        legend.text = element_text(size = 12)) +  # Adjust the font size here
-  scale_linetype_manual(values = c("solid", "dashed"), label=c("w/ distr. tarif","w/o distr. tariff")) +
-  labs(color = "")
-print(IV_plot)  
 
 
 

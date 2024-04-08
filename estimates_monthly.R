@@ -4,6 +4,9 @@
 #-1- Load packages 
 rm(list = ls())
 
+#remove.packages("rlang")
+#install.packages("rlang")#, type="source")
+
 library(readxl)
 library(tidyr)
 library(tidyverse)
@@ -17,6 +20,9 @@ library(psych) #descriptive statistics
 library(fixest) #fixed-effects panel data estimation 
 library(car)
 library(boot)
+
+#install.packages("dotwhisker")
+library(dotwhisker)
 
 ################################################################################
 #-2- set wd and load data 
@@ -467,6 +473,15 @@ estimate.data.monthly.final.ysset <- estimate.data.monthly.final %>%
 
 pdat.monthly = panel(estimate.data.monthly.final.ysset, ~zip+date)
 
+estimate.data.monthly.final.ysset %>%
+  select(c(b_net_defl_log, b_net_thous, b_gc_defl_thous, b_qw_defl_thous, b_protar_defl_thous, b_nm_defl_thous)) %>%
+  describe()
+
+estimate.data.monthly.final.ysset %>%
+  group_by(zip,year) %>%
+  summarise(across(all_of(controlvars), mean)) %>%
+  describe()
+
 #regular regressions 
 eq_monthly <- paste0("eq.pfe.m",c(1,2,3,4)) #12,16,8,9
 regress_list_monthly = list()
@@ -478,10 +493,16 @@ for(depvar in depvars){
     print(regname)
     regress_list_monthly[[regname]] <- feglm(eq_list_monthly[[eq]],
                                             data=pdat.monthly,#data=estimate.data.final.ysset,
-                                            family=quasipoisson, cluster="zip")
+                                            family=quasipoisson, cluster=c("zip"))
   }
 }
 
+regress_list_monthly[["pfe.m3.pv_count"]]
+
+summary(regress_list_monthly[["pfe.m4.pv_count"]])
+
+linearHypothesis(regress_list_monthly[["pfe.m4.pv_count"]], c("b_qw_defl_thous=b_gc_solw_defl_thous"))
+linearHypothesis(regress_list_monthly[["pfe.m4.pv_count"]], c("b_nm_solw_defl_thous=b_qw_defl_thous"))
 #IV regressions 
 #run IV regression 
 
@@ -567,6 +588,77 @@ etable(regress_omitted_monthly_list[pv_meansize_baseline],
        order = etable_order,
        group=etable_group_control)
 
+#####
+#-8.1.- Extensiton Create bar plot for presentations
+#####
+check <- regress_omitted_monthly_list[pv_count_baseline][[5]]
+
+
+confint(check, vcov = check$bootstr$vcov )
+
+barplot_df = function(model, conf_level = 0.95, boostrse=F){
+  reg_model <- model
+  if(boostrse == T){
+    est_conf <- confint(reg_model, level = conf_level, vcoc = reg_model$bootstr$vcov)  
+  }else{
+    est_conf <- confint(reg_model, level = conf_level)
+  }
+  
+  est_df <- data.frame(term = rownames(reg_model$coeftable),
+                       estimate = reg_model$coeftable[,1],
+                       conf.low = est_conf[,1],
+                       conf.high = est_conf[,2])
+  return(est_df)
+}
+
+barplot_list = list("Baseline" = 
+                      barplot_df(regress_omitted_monthly_list[pv_count_baseline][[4]],boostrse=F) %>%
+                      mutate(model="Baseline") %>%
+                      subset(term%in%c("b_gc_solw_defl_thous","b_qw_defl_thous",
+                                       "b_protar_pos_defl_thous","b_nm_solw_defl_thous")),
+                    "Control Function" = 
+                      barplot_df(regress_omitted_monthly_list[pv_count_baseline][[5]], boostrse=T) %>%
+                      mutate(model="Control Function", term = gsub("subreg_","",term)) %>%
+                      subset(term%in%c("b_gc_solw_defl_thous","b_qw_defl_thous",
+                                       "b_protar_pos_defl_thous","b_nm_solw_defl_thous")))
+
+# Combine the two data frames
+barplot_df <- reduce(barplot_list, rbind)
+
+barplot_pres <- barplot_df %>%
+  relabel_predictors(b_gc_solw_defl_thous = "Output-based", 
+                     b_qw_defl_thous = "Capacity-based", 
+                     b_protar_pos_defl_thous = "Capacity-based cost",
+                     b_nm_solw_defl_thous = "Net metering") %>%
+  dwplot(dot_args = list(size = 2),
+         whisker_args = list(size = 1),
+         model_order = c("Baseline","Control Function"),
+         dodge_size = 0.2) +
+  geom_vline(xintercept = 0, colour = "grey") +
+  theme_bw() +
+  theme(axis.text.y = element_text(margin = margin(0, 0, 0, 0, "cm"), size=12),
+        ) + 
+  #ggtitle("The Effectiveness on PV installations") +
+  xlab("Coefficient Estimate") +
+  theme(
+    plot.title = element_text(face = "bold", hjust=0.5),
+    legend.position = c(0.007, 0.01),
+    legend.justification = c(0, 0),
+    legend.background = element_rect(colour = "grey80"),
+    legend.title.align = .5,
+    #legend.name = "Model Specification"
+  ) +
+  scale_colour_grey(
+    start = .3,
+    end = .7,
+    name = "Model Specification",
+    #breaks = c(0, 1),
+    #labels = c("Baseline", "Control Function")
+  )
+
+print(barplot_pres)  
+ggsave("barplot_pres.pdf",barplot_pres, path =paste0(getwd(),"/data/plots/"),  height=4, width=8.75)
+
 
 names(regress_omitted_monthly_list)
 
@@ -588,7 +680,7 @@ etable(regress_omitted_monthly_list[pv_count_baseline_full],
 
 
 ################################################################################
-# -10- Save tables - baseline 
+# -9- Save tables - baseline 
 ################################################################################
 
 
@@ -684,6 +776,11 @@ regress_list_monthly_full_bunching <- c(regress_list_monthly_bunching,regress_li
 #Add omitted columns to display later in regression 
 names(regress_list_monthly_full_bunching)
 
+summary(regress_list_monthly_full_bunching[["pfe.mIV1.1st"]])
+summary(regress_list_monthly_full_bunching[["pfe.mIV1.2st.pv_count"]])
+
+summary(regress_list_monthly_full_bunching[["pfe.m4.pv_count"]])
+
 regress_omitted_monthly_bunching_list <- list()
 expvars_omitted_monthly_bunching_list <- list()
 
@@ -753,8 +850,8 @@ save_table_benefits(model_list=regress_shortterm_table_list,
 
 
 ################################################################################
-# -13- Extension: different discount rates, 
-# -13.1 - set up formulas 
+# -12- Extension: different discount rates, 
+# -12.1 - set up formulas 
 ################################################################################
 
 
@@ -834,8 +931,9 @@ eq_list_monthly_IV1st[["eq.pfe.mIV4.1st"]] <- as.formula(
          paste(controlvars,collapse="+"),
          fixed_effects_monthly))
 
+
 ################################################################################
-# -13.2 - Run regressions Monthly  
+# -12.2 - Run regressions Monthly  
 ################################################################################
 
 tmin <- 2008
@@ -919,7 +1017,7 @@ pv_dr_se <- list(~zip,~zip,~zip,~zip,
 
 
 ################################################################################
-# -13.3 - Update labeling, print & save tables
+# -12.3 - Update labeling, print & save tables
 ################################################################################
 
 benefitvars_labeled <- c("b_net_solw_defl_log"="Net benefits (log)",
@@ -1025,3 +1123,243 @@ summary(estimate.data.monthly.final.ysset$b_nm15_defl_thous)
 summary(estimate.data.monthly.final.ysset$b_nm7_defl_thous)
 summary(estimate.data.monthly.final.ysset$b_nm_defl_thous)
 
+
+################################################################################
+# -13- Extension: different electricity price assumptions, 
+# -13.1 - set up formulas 
+################################################################################
+
+
+rhs_list <- list() 
+
+rhs_list["rhs1"] <- paste("b_gc_solw_defl_thous+b_nm_mix_mavg_solw_defl_thous+b_protar_pos_defl_thous+b_qw_defl_thous",
+                          paste(controlvars,collapse="+"),sep="+")
+rhs_list["rhs2"] <- paste("b_gc_solw_defl_thous+b_nm_ellt10_solw_defl_thous+b_protar_pos_defl_thous+b_qw_defl_thous",
+                          paste(controlvars,collapse="+"),sep="+")
+
+
+
+rhs_list["rhsIV1.2st"] <- paste("b_gc_solw_defl_thous+b_nm_mix_mavg_solw_defl_thous+b_protar_pos_subreg_defl_thous+b_qw_subreg_defl_thous+res_1stage",
+                                paste(controlvars,collapse="+"),sep="+")
+rhs_list["rhsIV2.2st"] <- paste("b_gc_solw_defl_thous+b_nm_ellt10_solw_defl_thous+b_protar_pos_subreg_defl_thous+b_qw_subreg_defl_thous+res_1stage",
+                                paste(controlvars,collapse="+"),sep="+")
+
+# Loop through rhs_list and create equations
+
+eq_list_monthly <- list() #list placeholder 
+depvars <- c("pv_count","pv_meansize")
+
+fixed_effects_monthly <- "|year+date+zip"
+time_trends <- "zip[year]"
+
+
+for(depvar in c("pv_count","pv_meansize")){ #loop through dependent variables 
+  for(rhs_name in names(rhs_list)) {
+    regnr <- gsub("rhs","",rhs_name) #capture regression number 
+    rhs_formula <- as.formula(paste(depvar, "~", rhs_list[[rhs_name]], fixed_effects_monthly)) #set up formula
+    eq_list_monthly[[paste0("eq.pfe.m", regnr,".",depvar)]] <- rhs_formula #store formula in list 
+  }
+  
+}
+
+names(eq_list_monthly)
+names(rhs_list)
+
+#Set up IV 1 Stage 
+
+eq_list_monthly_IV1st <- list()
+
+#b_nm_mix_retail_6mavg_solw_thous
+#b_nm_mix_retail_solw_defl_thous
+
+eq_list_monthly_IV1st[["eq.pfe.mIV1.1st"]] <- as.formula(
+  paste0("b_nm_mix_mavg_solw_defl_thous~b_nm_mix_retail_solw_thous+b_gc_solw_defl_thous+b_protar_pos_subreg_defl_thous+b_qw_subreg_defl_thous+",
+         paste(controlvars,collapse="+"),
+         fixed_effects_monthly))
+
+eq_list_monthly_IV1st[["eq.pfe.mIV2.1st"]] <- as.formula(
+  paste0("b_nm_ellt10_solw_defl_thous~b_nm_mix_retail_ellt10_delf_solw_thous+b_gc_solw_defl_thous+b_protar_pos_subreg_defl_thous+b_qw_subreg_defl_thous+",
+         paste(controlvars,collapse="+"),
+         fixed_effects_monthly))
+
+names(eq_list_monthly_IV1st)
+################################################################################
+# -13.2 - Run regressions Monthly  
+################################################################################
+
+tmin <- 2008
+tmax <- 2019
+
+trange <- tmin:tmax
+
+#write.csv(estimate.data.monthly.final.ysset,paste0(getwd(),"\\data\\PV_monthly_estdata_stata.csv"), row.names = FALSE)
+#write.csv(estimate.data.monthly.final,paste0(getwd(),"\\data\\PV_monthly_estdata_stata.csv"), row.names = FALSE)
+
+estimate.data.monthly.final.ysset <- estimate.data.monthly.final %>% 
+  subset(year%in%trange & prebunch_flag<=1 & postbunch_flag<=1 )
+
+pdat.monthly = panel(estimate.data.monthly.final.ysset, ~zip+date)
+
+#regular regressions 
+eq_monthly <- paste0("eq.pfe.m",c(1,2)) #12,16,8,9
+regress_list_monthly = list()
+
+for(depvar in depvars){
+  for(n in eq_monthly){
+    eq <- paste(n,depvar,sep=".")
+    regname <- substr(eq,4,nchar(eq))
+    print(regname)
+    regress_list_monthly[[regname]] <- feglm(eq_list_monthly[[eq]],
+                                             data=pdat.monthly,#data=estimate.data.final.ysset,
+                                             family=quasipoisson, cluster="zip")
+  }
+}
+
+#IV regressions 
+names(regress_list_monthly)
+regress_list_monthly[["pfe.m2.pv_count"]]
+#run IV regression 
+
+iterations <- 100
+
+regress_list_monthly_IV <- c(regress_IV(estimate.data.monthly.final.ysset,
+                                        eq_2stage_lname = "eq.pfe.mIV1.2st.pv_count",
+                                        eq_1stage_lname = "eq.pfe.mIV1.1st",
+                                        boot_iterations = iterations),
+                             regress_IV(estimate.data.monthly.final.ysset,
+                                        eq_2stage_lname = "eq.pfe.mIV2.2st.pv_count",
+                                        eq_1stage_lname = "eq.pfe.mIV2.1st",
+                                        boot_iterations = iterations))
+
+
+regress_list_monthly_full <- c(regress_list_monthly,regress_list_monthly_IV)
+
+
+#Add omitted columns to display later in regression 
+names(regress_list_monthly_full)
+
+regress_omitted_monthly_list <- list()
+expvars_omitted_monthly_list <- list()
+
+for(i in names(regress_list_monthly_full)){
+  regress_omitted_monthly_list[[i]] <- etab_omitted(regress_list_monthly_full[[i]])
+  expvars_omitted_monthly_list[[i]] <- rownames(regress_omitted_monthly_list[[i]]$coeftable)
+}
+
+#etable(regres_list_monthly[["pfe.mIV1.2st"]], vcov = diag(regres_list_monthly[["pfe.mIV1.2st"]][["bootstr"]][["stderr"]]^2))
+
+
+pv_elec <- c("pfe.m1.pv_count","pfe.mIV1.2st.pv_count","pfe.m2.pv_count","pfe.mIV2.2st.pv_count")
+pv_elec_se <- list(~zip,diag(regress_omitted_monthly_list[["pfe.mIV1.2st.pv_count"]][["bootstr"]][["stderr"]]^2),
+                   ~zip,diag(regress_omitted_monthly_list[["pfe.mIV2.2st.pv_count"]][["bootstr"]][["stderr"]]^2))
+
+#etable_headers_bunching <- list("^ " = list("Number of PV installations" = 3, "Average new installed capacity"=3),
+#                                "^ " = list("Agg. benefits" = 1, "Sep. benefits"=1, "Sep. benefits (IV)"=1,
+#                                            "Agg. benefits" = 1, "Sep. benefits"=1, "Sep. benefits (IV)"=1))
+
+
+summary(regress_omitted_monthly_list[["pfe.mIV1.1st"]])
+names(regress_list_monthly_full[["pfe.mIV1.1st"]]$coefficients)
+wald(regress_list_monthly_full[["pfe.mIV1.1st"]],names(regress_list_monthly_full[["pfe.mIV1.1st"]]$coefficients)[1:11])
+
+
+linearHypothesis(regress_omitted_monthly_list[["pfe.mIV1.1st"]],c("b_nm_mix_retail_solw_thous=0",
+                                                                  "b_gc_solw_defl_thous=0",
+                                                                  "b_protar_pos_subreg_defl_thous=0"),
+                 test="F")
+summary(regress_omitted_monthly_list[["pfe.mIV1.1st"]])
+summary(regress_omitted_monthly_list[["pfe.mIV2.1st"]])
+
+corr(cbind(pdat.monthly$b_nm_mix_retail_solw_thous,pdat.monthly$b_nm_mix_6mavg_solw_defl_thous)) 
+corr(cbind(pdat.monthly$b_nm_mix_retail_6mavg_solw_thous,pdat.monthly$b_nm_mix_6mavg_solw_defl_thous))
+
+etable(regress_omitted_monthly_list[pv_elec],
+       vcov=pv_elec_se,
+       digits=3)
+
+################################################################################
+# -13.3 - Update labeling, print & save tables
+################################################################################
+
+benefitvars_labeled <- c("b_net_solw_defl_log"="Net benefits (log)",
+                         "b_net_solw_defl_thous"="Net benefits",
+                         "b_gc_solw_defl_thous"="Output-based incentive",
+                         "b_nm_mix_mavg_solw_defl_thous"="Net metering",
+                         "b_nm_ellt10_solw_defl_thous"="Net metering",
+                         "b_protar_pos_defl_thous"="Capacity-based cost",
+                         "b_qw_defl_thous"="Capacity-based incentive",
+                         "b_protar_pos_subreg_defl_thous"="Capacity-based cost",
+                         "b_qw_subreg_defl_thous"="Capacity-based incentive")
+
+estvars_labeled <- c(benefitvars_labeled,controlvars_labeled)
+
+
+setFixest_dict(estvars_labeled) #attach labels to estimation sample
+
+etable_headers_elec <- list("^ " = list("3 Month moving average electricity price" = 2, "10\\% Long-term electricity price increase"=2),
+                          "^ " = list("PPMLE" = 1, "P-CF" = 1, "PPMLE"=1, "P-CF"=1))
+
+etable(regress_omitted_monthly_list[pv_elec],
+       vcov=pv_elec_se,
+       digits=3,
+       group=etable_group_control,
+       extralines = etable_extralines,
+       headers = etable_headers_elec,
+       tex=F,
+       order = etable_order)
+
+
+save_table_benefits(model_list=regress_omitted_monthly_list,
+                    model_names=pv_elec,
+                    model_ses=pv_elec_se,
+                    save_name="elec_pvcount_benefits_reg",
+                    group=etable_group_control,
+                    headers=etable_headers_elec)
+
+linearHypothesis(regress_list_monthly[["pfe.m7.pv_count"]], c("b_qw15_defl_thous=b_nm15_solw_defl_thous"))
+linearHypothesis(regress_list_monthly[["pfe.m7.pv_count"]], c("b_gc15_solw_defl_thous=b_nm15_solw_defl_thous"))
+linearHypothesis(regress_list_monthly[["pfe.m7.pv_count"]], c("b_gc15_solw_defl_thous=b_qw15_defl_thous"))
+
+linearHypothesis(regress_list_monthly_IV[["pfe.mIV3.2st.pv_count"]], c("b_gc15_solw_defl_thous=b_nm15_solw_defl_thous"))
+linearHypothesis(regress_list_monthly_IV[["pfe.mIV3.2st.pv_count"]], c("b_qw15_subreg_defl_thous=b_nm15_solw_defl_thous"))
+linearHypothesis(regress_list_monthly_IV[["pfe.mIV3.2st.pv_count"]], c("b_qw15_subreg_defl_thous=b_gc15_solw_defl_thous"))
+
+summary(estimate.data.monthly.final.ysset$b_net15_defl_thous)
+mean(estimate.data.monthly.final.ysset$b_net15_defl_thous)
+summary(estimate.data.monthly.final.ysset$b_net7_defl_thous)
+summary(estimate.data.monthly.final.ysset$b_net_defl_thous)
+
+summary(estimate.data.monthly.final.ysset$b_protar15_defl_thous)
+mean(estimate.data.monthly.final.ysset$b_protar15_pos_defl_thous)/mean(estimate.data.monthly.final.ysset$b_net15_defl_thous)
+summary(estimate.data.monthly.final.ysset$b_protar7_pos_defl_thous)
+mean(estimate.data.monthly.final.ysset$b_protar7_pos_defl_thous)/mean(estimate.data.monthly.final.ysset$b_net7_defl_thous)
+summary(estimate.data.monthly.final.ysset$b_protar_pos_defl_thous)
+mean(estimate.data.monthly.final.ysset$b_protar_pos_defl_thous)/mean(estimate.data.monthly.final.ysset$b_net_defl_thous)
+
+mean(estimate.data.monthly.final.ysset$b_net15_defl_thous)/mean(estimate.data.monthly.final.ysset$b_net7_defl_thous)-1
+mean(estimate.data.monthly.final.ysset$b_net7_defl_thous)/mean(estimate.data.monthly.final.ysset$b_net_defl_thous)-1
+
+check <- estimate.data.monthly.final.ysset %>%
+  summarise(across(c("b_net_solw_defl_thous","b_net7_solw_defl_thous", "b_net15_solw_defl_thous",
+                     "b_protar_pos_defl_thous","b_protar7_pos_defl_thous","b_protar15_pos_defl_thous",
+                     "b_qw_defl_thous","b_qw7_defl_thous","b_qw15_defl_thous",
+                     "b_gc_defl_thous","b_gc7_defl_thous","b_gc15_defl_thous",
+                     "b_nm_defl_thous","b_nm7_defl_thous","b_nm15_defl_thous"), mean))
+
+mean(estimate.data.monthly.final.ysset$b_net7_defl_thous)/mean(estimate.data.monthly.final.ysset$b_net_defl_thous)-1
+
+
+summary(estimate.data.monthly.final.ysset$b_qw15_defl_thous)
+summary(estimate.data.monthly.final.ysset$b_qw7_defl_thous)
+summary(estimate.data.monthly.final.ysset$b_qw_defl_thous)
+
+summary(estimate.data.monthly.final.ysset$b_gc15_defl_thous)
+summary(estimate.data.monthly.final.ysset$b_gc7_defl_thous)
+summary(estimate.data.monthly.final.ysset$b_gc_defl_thous)
+
+summary(estimate.data.monthly.final.ysset$b_nm15_defl_thous)
+summary(estimate.data.monthly.final.ysset$b_nm7_defl_thous)
+summary(estimate.data.monthly.final.ysset$b_nm_defl_thous)
+
+
+################################################################################
